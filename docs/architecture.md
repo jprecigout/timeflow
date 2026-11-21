@@ -122,6 +122,14 @@ déjà pris plus de 12 s sur la carte : avec un délai unique de 15 s, la connex
 À chaque `Connect`, `WifiLink` déconnecte d'abord la station si elle est
 encore associée, puis relance une connexion non bloquante.
 
+## Nom sur le réseau
+
+`WifiLink::new` crée lui-même l'interface réseau de la station, avec le nom
+DHCP `HOSTNAME` défini dans `src/main.rs` (`timeflow`). C'est le nom envoyé à
+la box (option DHCP 12). `CONFIG_LWIP_LOCAL_HOSTNAME` (dans `sdkconfig.defaults`) ne sert plus
+que de valeur de repli. Le nom effectif est journalisé au démarrage
+(`Network hostname: …`).
+
 ## Coupure d'alimentation du bandeau
 
 Le MAX7219 ne peut pas être relu : rien n'indique qu'il a perdu son

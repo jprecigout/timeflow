@@ -83,8 +83,19 @@ compilation : recompiler et reflasher après chaque modification.
 Dans `src/main.rs`, on peut aussi ajuster `INTENSITY` (luminosité, de 0x00 à 0x0F)
 et `STYLE` (clignotement des deux points).
 
-Sur le réseau, l'ESP32 s'annonce sous le nom `timeflow` (réglé par
-`CONFIG_LWIP_LOCAL_HOSTNAME` dans `sdkconfig.defaults`).
+Sur le réseau, l'ESP32 s'annonce sous le nom `timeflow`, réglé par `HOSTNAME`
+dans `src/main.rs` et envoyé à la box dans les requêtes DHCP. Le log de
+démarrage l'affiche (`Network hostname: timeflow`).
+
+Si la box montre un autre nom (« espressif », par exemple), le firmware n'y est
+pour rien : il n'envoie jamais ce nom. Deux causes possibles :
+
+- la box a gardé le nom vu lors d'une connexion précédente (un ancien firmware
+  sur la même carte, la box retenant les appareils par adresse MAC) : renommer
+  ou oublier l'appareil dans son application, puis reconnecter l'horloge ;
+- la box affiche le fabricant déduit de l'adresse MAC (« Espressif ») à la
+  place du nom DHCP, ou en plus : seul le renommage dans son application y
+  change quelque chose.
 
 ## Compiler et flasher
 

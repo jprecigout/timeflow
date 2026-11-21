@@ -4,9 +4,11 @@ use core::time::Duration;
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::modem::Modem,
+    ipv4,
+    netif::{EspNetif, NetifConfiguration, NetifStack},
     nvs::EspDefaultNvsPartition,
     sys::EspError,
-    wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi},
+    wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi, WifiDriver},
 };
 use log::{info, warn};
 use timeflow_core::{
@@ -40,21 +42,45 @@ pub struct WifiLink<'d> {
 impl<'d> WifiLink<'d> {
     /// Configure la station avec `ssid` et `password` et démarre le pilote
     /// Wi-Fi. La connexion elle-même est lancée par le premier `poll`. Un mot
-    /// de passe vide désigne un réseau ouvert.
+    /// de passe vide désigne un réseau ouvert. `hostname` est le nom envoyé à
+    /// la box dans les requêtes DHCP (30 caractères au plus).
     ///
     /// # Errors
     ///
-    /// Renvoie une erreur si les identifiants sont trop longs ou si le pilote
-    /// ne peut pas démarrer.
+    /// Renvoie une erreur si les identifiants ou le nom sont trop longs, ou si
+    /// le pilote ne peut pas démarrer.
     pub fn new(
         modem: Modem,
         sysloop: EspSystemEventLoop,
         nvs: EspDefaultNvsPartition,
         ssid: &str,
         password: &str,
+        hostname: &str,
     ) -> anyhow::Result<Self> {
-        let mut wifi =
-            BlockingWifi::wrap(EspWifi::new(modem, sysloop.clone(), Some(nvs))?, sysloop)?;
+        // Interface station créée à la main pour fixer le nom DHCP dans le
+        // code, sans dépendre de `CONFIG_LWIP_LOCAL_HOSTNAME` (valeur de repli
+        // lue par ESP-IDF quand l'interface n'a pas de nom).
+        let sta_netif = EspNetif::new_with_conf(&NetifConfiguration {
+            ip_configuration: Some(ipv4::Configuration::Client(
+                ipv4::ClientConfiguration::DHCP(ipv4::DHCPClientSettings {
+                    hostname: Some(
+                        hostname
+                            .try_into()
+                            .map_err(|_| anyhow::anyhow!("hostname is too long"))?,
+                    ),
+                }),
+            )),
+            ..NetifConfiguration::wifi_default_client()
+        })?;
+        let driver = WifiDriver::new(modem, sysloop.clone(), Some(nvs))?;
+        let esp_wifi = EspWifi::wrap_all(driver, sta_netif, EspNetif::new(NetifStack::Ap)?)?;
+        // Simple information de diagnostic : une erreur de lecture ne doit pas
+        // empêcher le Wi-Fi de démarrer.
+        match esp_wifi.sta_netif().get_hostname() {
+            Ok(name) => info!("Network hostname: {name}"),
+            Err(e) => warn!("Cannot read network hostname ({e})"),
+        }
+        let mut wifi = BlockingWifi::wrap(esp_wifi, sysloop)?;
         // Avec WPA2 (valeur par défaut), un réseau ouvert serait refusé.
         let auth_method = if password.is_empty() {
             AuthMethod::None

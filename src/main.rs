@@ -34,6 +34,8 @@ use wifi::WifiLink;
 const WIFI_SSID: &str = env!("WIFI_SSID");
 /// Mot de passe du Wi-Fi, défini dans `wifi.toml` et injecté par `build.rs`.
 const WIFI_PASS: &str = env!("WIFI_PASS");
+/// Nom de l'horloge sur le réseau, tel que la box l'affiche (DHCP).
+const HOSTNAME: &str = "timeflow";
 /// Luminosité, de 0x00 (minimum) à 0x0F (maximum).
 const INTENSITY: u8 = 0x00;
 /// Options d'affichage du cadran.
@@ -76,7 +78,7 @@ fn main() -> anyhow::Result<()> {
     let clk = PinDriver::output(p.pins.gpio18)?;
     let mut screen = CachedScreen::new(Max7219Screen::from_pins(din, cs, clk, INTENSITY, LAYOUT)?);
 
-    let mut wifi = WifiLink::new(p.modem, sysloop, nvs, WIFI_SSID, WIFI_PASS)?;
+    let mut wifi = WifiLink::new(p.modem, sysloop, nvs, WIFI_SSID, WIFI_PASS, HOSTNAME)?;
 
     // SNTP est lancé tout de suite : la pile réseau est prête depuis la
     // création du Wi-Fi, et SNTP réessaie seul tant que le réseau manque. Il se
