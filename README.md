@@ -115,6 +115,50 @@ LD_LIBRARY_PATH=$PWD/.compat-libs cargo build --release
 La première compilation télécharge ESP-IDF (plusieurs Go dans `.embuild/`)
 et prend une dizaine de minutes.
 
+## Architecture
+
+Le projet est un workspace Cargo de deux crates :
+
+- **`timeflow-core/`** : toute la logique qui ne touche pas au matériel. Il
+  compile et se teste sur PC, sans ESP32.
+- **`timeflow`** (racine) : le firmware. Il ne fait que brancher le matériel
+  (bandeau, Wi-Fi, NTP) sur les abstractions de `timeflow-core`.
+
+```
+timeflow-core/src/
+  time.rs     heure validée et fuseau de Paris (été / hiver)
+  frame.rs    rendu de « HH:MM » en image 32x8, découpage en modules 8x8
+  screen.rs   trait Screen et cache des images déjà affichées
+  link.rs     décision de (re)connexion Wi-Fi (association puis DHCP)
+  health.rs   journalisation des pannes sans inonder les logs
+  timer.rs    minuterie périodique non bloquante
+src/
+  main.rs     initialisation et boucle principale (toutes les 200 ms)
+  display.rs  adaptateur du pilote MAX7219 vers Screen
+  wifi.rs     connexion Wi-Fi non bloquante
+build.rs      injecte les identifiants de wifi.toml dans le firmware
+```
+
+```mermaid
+flowchart LR
+    main[main.rs] --> display[display.rs] & wifi[wifi.rs]
+    main --> core[timeflow-core]
+    display --> core
+    wifi --> core
+    display --> max[pilote max7219]
+    wifi --> esp[esp-idf-svc]
+```
+
+À chaque tour de boucle, le firmware vérifie le Wi-Fi (et relance la connexion
+si besoin), lit l'heure UTC synchronisée par NTP, la convertit en heure de
+Paris, dessine l'image et l'envoie au bandeau si elle a changé. Aucun appel
+n'est bloquant : l'heure reste affichée pendant une coupure du Wi-Fi.
+
+Le code s'appuie sur quelques design patterns : Newtype (`Time`), Strategy
+(`TimeZone`), Adapter (`Max7219Screen`), Decorator (`CachedScreen`) et State
+(`Reconnector`). Le détail est dans [docs/architecture.md](docs/architecture.md)
+et [docs/design-patterns.md](docs/design-patterns.md).
+
 ## Tests
 
 La logique indépendante du matériel est dans le crate `timeflow-core`, testé
