@@ -1,0 +1,4 @@
+# Copier ce fichier en wifi.toml et y mettre ses identifiants.
+# wifi.toml n'est pas versionné (voir .gitignore).
+ssid = "MonWifi"
+password = "MonMotDePasse"
