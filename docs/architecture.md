@@ -122,6 +122,25 @@ déjà pris plus de 12 s sur la carte : avec un délai unique de 15 s, la connex
 À chaque `Connect`, `WifiLink` déconnecte d'abord la station si elle est
 encore associée, puis relance une connexion non bloquante.
 
+### Économie d'énergie désactivée
+
+Sur le réseau maillé de l'utilisateur (deux points d'accès, canaux 1 et 11,
+signal de -65 à -78 dBm), la station restait parfois associée sans obtenir
+d'adresse IP, même en 60 s. Le log montrait que la radio dormait 90 % du temps :
+c'est le mode « modem sleep » d'ESP-IDF (`WIFI_PS_MIN_MODEM`), actif par défaut.
+
+**Hypothèse** : dans ce mode, le point d'accès doit garder les trames destinées
+à la station jusqu'à son réveil ; certains réseaux maillés le font mal, et les
+réponses DHCP seraient alors perdues. Elle sera confirmée si, après
+désactivation, l'adresse IP arrive en quelques secondes à plusieurs démarrages
+de suite. Sinon, il restera à étudier l'itinérance entre les deux points
+d'accès.
+
+L'horloge étant alimentée en permanence, `WifiLink::new` désactive cette
+économie d'énergie (`esp_wifi_set_ps(WIFI_PS_NONE)`), au prix d'une
+consommation un peu plus élevée. Le log affiche alors `Wi-Fi power save
+disabled`, et la ligne `pm start, type: 1` d'ESP-IDF ne doit plus apparaître.
+
 ## Nom sur le réseau
 
 `WifiLink::new` crée lui-même l'interface réseau de la station, avec le nom

@@ -7,7 +7,7 @@ use esp_idf_svc::{
     ipv4,
     netif::{EspNetif, NetifConfiguration, NetifStack},
     nvs::EspDefaultNvsPartition,
-    sys::EspError,
+    sys::{esp, esp_wifi_set_ps, wifi_ps_type_t_WIFI_PS_NONE, EspError},
     wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi, WifiDriver},
 };
 use log::{info, warn};
@@ -98,6 +98,7 @@ impl<'d> WifiLink<'d> {
             ..Default::default()
         }))?;
         wifi.start()?;
+        disable_power_save()?;
         Ok(Self {
             wifi,
             reconnector: Reconnector::new(TIMEOUTS),
@@ -164,4 +165,26 @@ impl<'d> WifiLink<'d> {
             warn!("Wi-Fi connection could not be started ({e}), retrying later");
         }
     }
+}
+
+/// Désactive l'économie d'énergie du modem Wi-Fi (mode « modem sleep », actif
+/// par défaut).
+///
+/// Dans ce mode, la radio dort l'essentiel du temps (environ 90 % mesurés sur
+/// la carte) et ne se réveille qu'aux balises DTIM du point d'accès. Sur le
+/// réseau maillé de l'utilisateur, la station restait associée sans obtenir
+/// d'adresse IP : on suppose que les réponses DHCP étaient perdues pendant ce
+/// sommeil (voir `docs/architecture.md`). L'horloge est alimentée en
+/// permanence, l'économie d'énergie ne lui apporte rien.
+///
+/// # Errors
+///
+/// Renvoie l'erreur d'ESP-IDF si le pilote Wi-Fi refuse le réglage.
+fn disable_power_save() -> Result<(), EspError> {
+    // SAFETY: `esp_wifi_set_ps` ne reçoit qu'une valeur d'énumération, sans
+    // pointeur. ESP-IDF exige seulement que le pilote Wi-Fi soit initialisé,
+    // ce qui est le cas : la fonction est appelée après `wifi.start()`.
+    esp!(unsafe { esp_wifi_set_ps(wifi_ps_type_t_WIFI_PS_NONE) })?;
+    info!("Wi-Fi power save disabled");
+    Ok(())
 }
