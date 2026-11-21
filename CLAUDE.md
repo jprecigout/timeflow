@@ -8,11 +8,19 @@ TimeFlow est une horloge sur bandeau LED : un ESP32-WROOM-32 pilote un bandeau
 MAX7219 de 4 modules (32x8 pixels). Il affiche `HH:MM`, l'heure vient du NTP via
 le Wi-Fi, et le passage heure d'été / heure d'hiver (France) est automatique.
 
-- `src/main.rs` : initialisation du matériel, du Wi-Fi et du NTP, boucle d'affichage.
-- `src/clock.rs` : logique pure (police, calcul de l'heure de Paris, rendu des
-  images, conversion vers les modules). Ce module ne dépend pas du matériel.
-- `build.rs` : lit `wifi.toml` et transmet les identifiants au code via `env!`.
-- `docs/` : documentation du projet (voir plus bas).
+Le projet est un workspace Cargo de deux crates :
+
+- `timeflow-core/` : logique indépendante du matériel (heure et fuseau, rendu,
+  abstraction `Screen`, reconnexion, suivi des pannes). Il est `no_std` hors
+  tests, interdit `unsafe`, ne dépend que de `log`, compile sur PC et contient
+  les tests unitaires.
+- `timeflow` (racine) : le firmware. `src/main.rs` (initialisation, boucle
+  principale), `src/display.rs` (adaptateur MAX7219), `src/wifi.rs` (connexion
+  Wi-Fi). `build.rs` lit `wifi.toml` et transmet les identifiants via `env!`.
+
+Toute nouvelle logique qui ne touche pas directement le matériel va dans
+`timeflow-core`, avec ses tests. La documentation du projet est dans `docs/`
+(voir plus bas).
 
 La cible est `xtensa-esp32-espidf` (toolchain `esp`, voir `rust-toolchain.toml`
 et `.cargo/config.toml`). Le README décrit l'installation, la compilation et le
@@ -24,20 +32,23 @@ flash.
 . ~/export-esp.sh                                          # à faire dans chaque nouveau terminal
 LD_LIBRARY_PATH=$PWD/.compat-libs cargo build --release    # compiler
 LD_LIBRARY_PATH=$PWD/.compat-libs cargo run --release      # compiler, flasher et ouvrir le moniteur
+cargo test-core                                            # tests de timeflow-core sur PC
 cargo fmt                                                  # formater
 cargo fmt --check                                          # vérifier le formatage
-LD_LIBRARY_PATH=$PWD/.compat-libs cargo clippy --release   # lints
+LD_LIBRARY_PATH=$PWD/.compat-libs cargo clippy --release   # lints du firmware
+cargo clippy -p timeflow-core --target x86_64-unknown-linux-gnu --all-targets  # lints du core
 ```
 
 ## Langues
 
-- **Code en anglais** : identifiants, commentaires, commentaires de documentation
-  (`///`, `//!`), messages de log et d'erreur.
+- **Code en anglais** : identifiants (noms de types, fonctions, variables,
+  modules, fichiers), messages de log et d'erreur.
+- **Commentaires en français** : commentaires `//`, commentaires de
+  documentation (`///`, `//!`) et commentaires de configuration (`#` dans les
+  fichiers TOML). Les noms de patterns, de types et de fonctions cités dans un
+  commentaire restent tels quels.
 - **Tout le reste en français** : documentation dans `docs/`, README, description
   des commits, descriptions de pull request, échanges avec l'utilisateur.
-
-Le code existant contient encore des commentaires en français : les traduire en
-anglais quand on modifie le fichier concerné.
 
 ## Règles de code
 
@@ -75,8 +86,8 @@ Le code doit **obligatoirement** être commenté :
   les `enum` aux booléens ou entiers « magiques ».
 - Éviter `unsafe` ; quand il est inévitable, l'isoler dans une petite fonction
   sûre et le justifier.
-- Garder la logique pure (comme `clock.rs`) séparée du code matériel pour pouvoir
-  la tester ; chaque logique nouvelle vient avec ses tests unitaires.
+- Garder la logique pure dans `timeflow-core`, séparée du code matériel, pour
+  pouvoir la tester ; chaque logique nouvelle vient avec ses tests unitaires.
 - Pas d'allocation inutile dans la boucle d'affichage : le firmware tourne sur un
   microcontrôleur aux ressources limitées.
 
@@ -90,8 +101,7 @@ Favoriser le découplage entre les composants :
   cœur de la logique ;
 - un module = une responsabilité ; limiter ce qui est `pub` au strict nécessaire ;
 - la logique métier ne doit jamais dépendre directement d'`esp-idf-svc` ou du
-  pilote `max7219` : seul le code d'intégration (`main.rs` ou un module
-  d'adaptation dédié) les connaît.
+  pilote `max7219` : seul le firmware (`src/`) les connaît.
 
 ### Design patterns
 
@@ -109,7 +119,7 @@ Chaque pattern utilisé doit être **documenté dans `docs/`** avec :
 Le fichier `docs/design-patterns.md` recense tous les patterns utilisés dans le
 projet : le mettre à jour à chaque ajout, modification ou retrait d'un pattern.
 Un commentaire dans le code peut aussi nommer le pattern (par exemple
-`// Adapter pattern: wraps the MAX7219 driver behind the Display trait`).
+`// Pattern Adapter : expose le pilote MAX7219 derrière le trait Screen`).
 
 ## Documentation
 
@@ -124,8 +134,10 @@ Un commentaire dans le code peut aussi nommer le pattern (par exemple
 
 Aucun commit sans revue de code préalable :
 
-1. `cargo fmt --check` et `cargo clippy` passent sans erreur ni avertissement ;
-2. le projet compile (`cargo build --release`) ;
+1. `cargo fmt --check` et `cargo clippy` (firmware et core) passent sans erreur
+   ni avertissement ;
+2. les tests passent (`cargo test-core`) et le firmware compile
+   (`cargo build --release`) ;
 3. une revue du diff est faite, par l'agent `rust-developer-senior` ou avec
    `/code-review`, et par l'agent `software-architect` quand le changement touche
    l'architecture (nouveau module, nouveau trait, nouveau pattern, nouvelle

@@ -12,3 +12,7 @@ build-std = ["std", "panic_abort"]
 [env]
 MCU = "esp32"
 ESP_IDF_VERSION = "v5.3.3"
+
+[alias]
+# Tests sur PC de la logique indépendante du matériel (cargo test-core)
+test-core = "test -p timeflow-core --target x86_64-unknown-linux-gnu"

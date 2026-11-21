@@ -6,9 +6,12 @@ resolver = "2"
 rust-version = "1.77"
 license = "Apache-2.0"
 
+[workspace]
+members = ["timeflow-core"]
+
 [[bin]]
 name = "timeflow"
-harness = false   # pas de tests sur la cible ESP32
+harness = false   # pas de tests sur la cible ESP32 (ils sont dans timeflow-core)
 
 [profile.release]
 opt-level = "s"
@@ -20,8 +23,10 @@ opt-level = "z"
 [dependencies]
 log = "0.4"
 anyhow = "1"
+embedded-hal = "1"
 esp-idf-svc = "0.51"
 max7219 = "0.5"
+timeflow-core = { path = "timeflow-core" }
 
 [build-dependencies]
 embuild = "0.33"

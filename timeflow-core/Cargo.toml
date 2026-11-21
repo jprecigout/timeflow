@@ -1,0 +1,10 @@
+[package]
+name = "timeflow-core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+license = "Apache-2.0"
+description = "Hardware-independent logic of the TimeFlow clock (time zone, rendering, supervision)"
+
+[dependencies]
+log = "0.4"

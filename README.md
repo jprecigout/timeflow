@@ -40,9 +40,10 @@ Sur le connecteur d'entrée du bandeau (côté `DIN`) :
 ## Si l'affichage est tourné ou dans le désordre
 
 Selon le modèle de bandeau, les modules sont montés différemment. Dans
-`src/main.rs`, ajuster `STYLE` puis reflasher :
+`src/main.rs`, ajuster `LAYOUT` puis reflasher :
 
-- chiffres tournés ou en miroir dans chaque module : changer `rotation` (0, 1, 2 ou 3) ;
+- chiffres tournés ou en miroir dans chaque module : changer `rotation`
+  (`Rotation::None`, `Quarter`, `Half` ou `ThreeQuarters`) ;
 - morceaux de chiffres dans le mauvais ordre : passer `reverse_modules` à `true`.
 
 ## Installation (une seule fois)
@@ -80,7 +81,7 @@ puis y renseigner `ssid` et `password`. Ils sont intégrés au firmware à la
 compilation : recompiler et reflasher après chaque modification.
 
 Dans `src/main.rs`, on peut aussi ajuster `INTENSITY` (luminosité, de 0x00 à 0x0F)
-et `STYLE` (clignotement des deux points, orientation des modules).
+et `STYLE` (clignotement des deux points).
 
 Sur le réseau, l'ESP32 s'annonce sous le nom `timeflow` (réglé par
 `CONFIG_LWIP_LOCAL_HOSTNAME` dans `sdkconfig.defaults`).
@@ -102,6 +103,15 @@ LD_LIBRARY_PATH=$PWD/.compat-libs cargo build --release
 
 La première compilation télécharge ESP-IDF (plusieurs Go dans `.embuild/`)
 et prend une dizaine de minutes.
+
+## Tests
+
+La logique indépendante du matériel est dans le crate `timeflow-core`, testé
+sur PC (pas besoin de l'ESP32) :
+
+```bash
+cargo test-core
+```
 
 ## Formatage du code
 

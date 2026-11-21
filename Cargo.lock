@@ -1347,11 +1347,20 @@ name = "timeflow"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "embedded-hal 1.0.0",
  "embuild",
  "esp-idf-svc",
  "log",
  "max7219",
+ "timeflow-core",
  "toml",
+]
+
+[[package]]
+name = "timeflow-core"
+version = "0.1.0"
+dependencies = [
+ "log",
 ]
 
 [[package]]

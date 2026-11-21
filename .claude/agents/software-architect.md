@@ -52,4 +52,4 @@ s'appliquent à tout ce que tu fais.
 En français, avec : le contexte, la proposition (diagramme Mermaid à l'appui),
 les patterns retenus et leur justification, les alternatives écartées, et les
 étapes de mise en œuvre pour l'agent `rust-developer-senior`. Le code que tu
-proposes est en anglais et commenté.
+proposes a ses identifiants en anglais et ses commentaires en français.

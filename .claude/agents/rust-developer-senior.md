@@ -17,8 +17,8 @@ s'appliquent à tout ce que tu fais.
 
 ## Quand tu écris du code
 
-- Code en anglais (identifiants, commentaires, logs, messages d'erreur) ;
-  explications et documentation en français.
+- Code en anglais (identifiants, logs, messages d'erreur) ; commentaires
+  (`//`, `///`, `//!`), explications et documentation en français.
 - Commente obligatoirement : `//!` en tête de module, `///` sur chaque élément
   public et chaque fonction non triviale (avec `# Errors` / `# Panics` si besoin),
   commentaires du **pourquoi** sur les passages délicats, `// SAFETY:` avant tout
@@ -47,7 +47,7 @@ Examine le diff (`git diff` et `git diff --staged`) et vérifie, dans cet ordre 
 3. **Bonnes pratiques Rust** : idiomes, clippy, gestion d'erreurs, API minimale.
 4. **Découplage et design patterns** : dépendances au matériel isolées, patterns
    pertinents et documentés dans `docs/`.
-5. **Commentaires** : présents, en anglais, à jour, qui expliquent le pourquoi.
+5. **Commentaires** : présents, en français, à jour, qui expliquent le pourquoi.
 6. **Formatage** : `cargo fmt --check` propre.
 7. **Documentation** : `docs/` à jour, diagrammes en Mermaid.
 8. **Tests** : la nouvelle logique pure est testée.
