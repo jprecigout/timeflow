@@ -11,9 +11,9 @@ le Wi-Fi, et le passage heure d'été / heure d'hiver (France) est automatique.
 Le projet est un workspace Cargo de deux crates :
 
 - `timeflow-core/` : logique indépendante du matériel (heure et fuseau, rendu,
-  abstraction `Screen`, reconnexion, suivi des pannes). Il est `no_std` hors
-  tests, interdit `unsafe`, ne dépend que de `log`, compile sur PC et contient
-  les tests unitaires.
+  abstraction `Screen`, reconnexion, suivi des pannes, minuterie). Il est
+  `no_std` hors tests, interdit `unsafe`, ne dépend que de `log`, compile sur PC
+  et contient les tests unitaires.
 - `timeflow` (racine) : le firmware. `src/main.rs` (initialisation, boucle
   principale), `src/display.rs` (adaptateur MAX7219), `src/wifi.rs` (connexion
   Wi-Fi). `build.rs` lit `wifi.toml` et transmet les identifiants via `env!`.

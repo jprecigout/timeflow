@@ -16,3 +16,4 @@ pub mod health;
 pub mod link;
 pub mod screen;
 pub mod time;
+pub mod timer;

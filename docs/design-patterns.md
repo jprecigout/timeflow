@@ -10,6 +10,7 @@ classDiagram
     class Screen {
         <<trait>>
         draw(frame) Result
+        reinitialize() Result
     }
     class CachedScreen~S~ {
         inner: S
@@ -109,8 +110,9 @@ L'`enum Rotation` de `frame.rs` suit la même idée : elle remplace un entier
   l'image ne change qu'une fois par seconde, voire une fois par minute.
 - **Pourquoi ce choix** : `CachedScreen` enveloppe n'importe quel `Screen` et
   n'envoie une image que si elle diffère de la dernière écrite avec succès,
-  sans changer l'interface. L'adaptateur reste simple, et le cache est testé sur
-  PC.
+  sans changer l'interface. Il transmet aussi `reinitialize` à l'afficheur
+  enveloppé et vide alors son cache, car le contenu réel de l'afficheur n'est
+  plus connu. L'adaptateur reste simple, et le cache est testé sur PC.
 - **Alternatives écartées** : mémoriser la dernière image dans `main` ou dans
   `Max7219Screen`. Cela aurait mélangé deux responsabilités.
 

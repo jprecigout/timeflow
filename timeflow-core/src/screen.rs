@@ -17,6 +17,20 @@ pub trait Screen {
     ///
     /// Renvoie `Self::Error` si l'image n'a pas pu être envoyée à l'afficheur.
     fn draw(&mut self, frame: &Frame) -> Result<(), Self::Error>;
+
+    /// Renvoie toute la configuration de l'afficheur, pour le remettre en
+    /// état s'il a perdu ses réglages (coupure de son alimentation, par
+    /// exemple). Le contenu affiché doit ensuite être redessiné.
+    ///
+    /// Par défaut, ne fait rien : c'est le cas d'un afficheur qui ne peut pas
+    /// perdre sa configuration.
+    ///
+    /// # Errors
+    ///
+    /// Renvoie `Self::Error` si la configuration n'a pas pu être envoyée.
+    fn reinitialize(&mut self) -> Result<(), Self::Error> {
+        Ok(())
+    }
 }
 
 /// Écran qui ne transmet une image que si elle diffère de la dernière affichée.
@@ -50,16 +64,25 @@ impl<S: Screen> Screen for CachedScreen<S> {
         self.last = Some(*frame);
         Ok(())
     }
+
+    fn reinitialize(&mut self) -> Result<(), Self::Error> {
+        // Le contenu de l'afficheur n'est plus connu : le cache est vidé pour
+        // que la prochaine image soit envoyée, même si elle n'a pas changé.
+        self.last = None;
+        self.inner.reinitialize()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Doublure de test : enregistre les images reçues et peut être mise en échec.
+    /// Doublure de test : enregistre les images reçues et les
+    /// réinitialisations, et peut être mise en échec.
     #[derive(Default)]
     struct Recorder {
         frames: Vec<Frame>,
+        reinits: usize,
         fail: bool,
     }
 
@@ -71,6 +94,14 @@ mod tests {
                 return Err(());
             }
             self.frames.push(*frame);
+            Ok(())
+        }
+
+        fn reinitialize(&mut self) -> Result<(), ()> {
+            if self.fail {
+                return Err(());
+            }
+            self.reinits += 1;
             Ok(())
         }
     }
@@ -101,5 +132,37 @@ mod tests {
             screen.draw(&frame).unwrap();
         }
         assert_eq!(recorder.frames, vec![frame]);
+    }
+
+    #[test]
+    fn reinitialize_forces_next_frame() {
+        let mut recorder = Recorder::default();
+        let frame = [1; 8];
+        {
+            let mut screen = CachedScreen::new(&mut recorder);
+            screen.draw(&frame).unwrap();
+            screen.reinitialize().unwrap();
+            screen.draw(&frame).unwrap();
+            screen.draw(&frame).unwrap();
+        }
+        assert_eq!(recorder.frames, vec![frame, frame]);
+        assert_eq!(recorder.reinits, 1);
+    }
+
+    #[test]
+    fn failed_reinitialize_still_clears_cache() {
+        let mut recorder = Recorder::default();
+        let frame = [1; 8];
+        {
+            let mut screen = CachedScreen::new(&mut recorder);
+            screen.draw(&frame).unwrap();
+            screen.inner.fail = true;
+            assert!(screen.reinitialize().is_err());
+            screen.inner.fail = false;
+            screen.draw(&frame).unwrap();
+        }
+        // L'image est renvoyée : on ne sait pas ce que l'afficheur a gardé.
+        assert_eq!(recorder.frames, vec![frame, frame]);
+        assert_eq!(recorder.reinits, 0);
     }
 }

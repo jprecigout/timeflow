@@ -25,6 +25,7 @@ use timeflow_core::{
     health::FailureLatch,
     screen::{CachedScreen, Screen},
     time::{EuropeParis, Time},
+    timer::Interval,
 };
 use wifi::WifiLink;
 
@@ -49,6 +50,9 @@ const REFRESH_PERIOD: Duration = Duration::from_millis(200);
 /// Période de clignotement des deux points pendant l'attente : un multiple de
 /// `REFRESH_PERIOD`, pour que le clignotement reste régulier.
 const WAITING_BLINK_PERIOD_MS: u128 = 400;
+/// Période de renvoi de la configuration du bandeau : délai maximal avant que
+/// le bandeau se rallume après une coupure de sa seule alimentation.
+const SCREEN_REINIT_PERIOD: Duration = Duration::from_secs(10);
 
 /// Point d'entrée : initialise le matériel, puis rafraîchit l'affichage en
 /// boucle tout en maintenant le Wi-Fi.
@@ -83,8 +87,10 @@ fn main() -> anyhow::Result<()> {
     let mut time_synced = false;
 
     let mut screen_health = FailureLatch::new("display");
+    let mut reinit_health = FailureLatch::new("display configuration");
     let mut clock_health = FailureLatch::new("system clock");
     let boot = Instant::now();
+    let mut screen_reinit = Interval::new(SCREEN_REINIT_PERIOD, boot.elapsed());
 
     loop {
         let uptime = boot.elapsed();
@@ -108,6 +114,12 @@ fn main() -> anyhow::Result<()> {
                 waiting_pattern((uptime.as_millis() / WAITING_BLINK_PERIOD_MS) as u64)
             }
         };
+        // Le MAX7219 ne peut pas être relu : on ne sait pas s'il a perdu son
+        // alimentation. On renvoie donc périodiquement sa configuration, puis
+        // l'image (le cache est vidé par `reinitialize`).
+        if screen_reinit.is_due(uptime) {
+            reinit_health.check(screen.reinitialize());
+        }
         screen_health.check(screen.draw(&frame));
 
         sleep(REFRESH_PERIOD);

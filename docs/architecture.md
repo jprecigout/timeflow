@@ -14,7 +14,8 @@ Le projet est un workspace Cargo de deux crates :
 |--------------------------------|----------------------------------------------------------------------|
 | `timeflow-core/src/time.rs`    | `Time` (heure validée), trait `TimeZone` et fuseau `EuropeParis` (été / hiver). |
 | `timeflow-core/src/frame.rs`   | Police 5x7, rendu de `HH:MM` et de l'attente `--:--` en image 32x8 (`Style`), découpage en modules 8x8 selon le montage (`ModuleLayout`, `Rotation`). |
-| `timeflow-core/src/screen.rs`  | Trait `Screen` (afficher une image) et `CachedScreen` (n'envoie que les images qui changent). |
+| `timeflow-core/src/screen.rs`  | Trait `Screen` (afficher une image, renvoyer la configuration) et `CachedScreen` (n'envoie que les images qui changent). |
+| `timeflow-core/src/timer.rs`   | `Interval` : minuterie périodique non bloquante.                     |
 | `timeflow-core/src/link.rs`    | `Reconnector` : machine à états qui décide quand relancer la connexion réseau. |
 | `timeflow-core/src/health.rs`  | `FailureLatch` : journalise une panne et son rétablissement, sans inonder les logs. |
 | `src/main.rs`                  | Initialisation et boucle principale du firmware.                     |
@@ -41,9 +42,10 @@ flowchart LR
         screen[screen.rs]
         link[link.rs]
         health[health.rs]
+        timer[timer.rs]
     end
     main --> display & wifi
-    main --> time & frame & screen & health
+    main --> time & frame & screen & health & timer
     display -- "implémente Screen" --> screen
     display --> frame
     wifi --> link & health
@@ -80,6 +82,10 @@ sequenceDiagram
         else pas encore synchronisée ou horloge invalide
             M->>C: waiting_pattern
         end
+        opt toutes les 10 s
+            M->>S: reinitialize
+            Note over S: renvoie la configuration du bandeau<br/>et vide le cache
+        end
         M->>S: draw(frame)
         Note over S: écrit sur le bandeau seulement si l'image a changé
     end
@@ -101,12 +107,28 @@ stateDiagram-v2
 associée sans adresse IP (tentative à moitié faite), puis relance une connexion
 non bloquante.
 
+## Coupure d'alimentation du bandeau
+
+Le MAX7219 ne peut pas être relu : rien n'indique qu'il a perdu son
+alimentation alors que l'ESP32 est resté allumé. Il redémarre alors éteint et
+sans image. Toutes les 10 s, `main.rs` appelle donc `reinitialize` :
+`Max7219Screen` renvoie tous les registres de configuration (mode test, lignes
+actives, mode de décodage, luminosité, allumage) et `CachedScreen` vide son
+cache, si bien que l'image courante est renvoyée dans le même tour de boucle.
+Le bandeau se rallume ainsi en 10 s environ (plus un tour de boucle, soit
+200 ms). Ce renvoi n'efface pas l'affichage : il ne provoque aucun clignotement
+quand le bandeau n'a rien perdu.
+
+Ce renvoi systématique couvre aussi un redémarrage imparfait : pendant la
+coupure, le MAX7219 peut rester partiellement alimenté par ses entrées DIN, CS
+et CLK, et ne pas repartir proprement.
+
 ## Gestion des erreurs
 
 - Erreurs à l'initialisation (périphériques, bandeau, Wi-Fi, SNTP), toutes avant
   la boucle : `main` renvoie l'erreur et le firmware s'arrête, il n'y a rien à
   afficher sans elles.
-- Erreurs dans la boucle (écriture sur le bandeau, horloge système, état du
-  Wi-Fi) : elles sont journalisées une seule fois par `FailureLatch`, puis la
-  boucle continue. Une image qui n'a pas pu être écrite est renvoyée au tour
-  suivant.
+- Erreurs dans la boucle (écriture et configuration du bandeau, horloge
+  système, état du Wi-Fi) : elles sont journalisées une seule fois par
+  `FailureLatch`, puis la boucle continue. Une image qui n'a pas pu être écrite
+  est renvoyée au tour suivant.
