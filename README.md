@@ -112,6 +112,11 @@ cargo fmt          # formate le code
 cargo fmt --check  # vérifie seulement, sans rien modifier
 ```
 
+## Documentation
+
+La documentation technique (architecture, design patterns) est dans [docs/](docs/README.md),
+et les règles de contribution dans [CLAUDE.md](CLAUDE.md).
+
 ## Licence
 
 Ce projet est distribué sous la licence Apache 2.0. Voir le fichier [LICENSE](LICENSE).
