@@ -34,15 +34,26 @@ classDiagram
         from_utc(utc, zone) Time
     }
     class Reconnector {
-        timeout: Duration
+        timeouts: LinkTimeouts
         state: LinkState
-        poll(now, is_up) LinkAction
+        poll(now, status) LinkAction
     }
     class LinkState {
         <<enumeration>>
         Up
         Down
-        Connecting
+        Associating
+        AwaitingAddress
+    }
+    class LinkStatus {
+        <<enumeration>>
+        Down
+        Associated
+        Up
+    }
+    class LinkTimeouts {
+        association: Duration
+        address: Duration
     }
     class WifiLink {
         poll(now)
@@ -53,6 +64,8 @@ classDiagram
     TimeZone <|.. EuropeParis : Strategy
     Time ..> TimeZone : utilise
     Reconnector *-- LinkState : State
+    Reconnector *-- LinkTimeouts
+    Reconnector ..> LinkStatus : lit
     WifiLink *-- Reconnector
 ```
 
@@ -71,8 +84,12 @@ classDiagram
 - **Alternatives écartées** : valider dans `render` et renvoyer une erreur. Cela
   aurait reporté le problème sur chaque appelant.
 
-L'`enum Rotation` de `frame.rs` suit la même idée : elle remplace un entier
-« 0 à 3 » qui acceptait des valeurs sans signification.
+Les `enum` suivent la même idée :
+- `Rotation` (`frame.rs`) remplace un entier « 0 à 3 » qui acceptait des valeurs
+  sans signification ;
+- `LinkStatus` (`link.rs`) remplace un booléen « le lien fonctionne » qui ne
+  distinguait pas une station associée en attente de DHCP d'une station
+  déconnectée.
 
 ### Strategy
 
@@ -119,7 +136,8 @@ L'`enum Rotation` de `frame.rs` suit la même idée : elle remplace un entier
 ### State
 
 - **Où** : `timeflow-core/src/link.rs`, type `Reconnector` (états `Up`, `Down`,
-  `Connecting` de l'`enum LinkState`), utilisé par `WifiLink` dans `src/wifi.rs`
+  `Associating` et `AwaitingAddress` de l'`enum LinkState`), utilisé par
+  `WifiLink` dans `src/wifi.rs`
 - **Forme** : la forme idiomatique en Rust, une `enum` d'états et un `match`,
   plutôt que des objets d'état polymorphes comme dans la version d'origine du
   pattern.
@@ -127,8 +145,10 @@ L'`enum Rotation` de `frame.rs` suit la même idée : elle remplace un entier
   n'était jamais rattrapée. De plus, une tentative restée à moitié faite
   (associée mais sans adresse IP) bloquait les essais suivants.
 - **Pourquoi ce choix** : la décision (attendre ou relancer) dépend de l'état
-  courant et du temps écoulé. La machine à états est pure, donc testée sur PC.
-  `WifiLink` se contente d'exécuter l'action demandée, de façon non bloquante.
+  courant, de l'étape en cours (association ou DHCP) et du temps écoulé. La
+  machine à états est pure, donc testée sur PC, y compris le cas d'un DHCP lent
+  observé sur la carte. `WifiLink` se contente d'exécuter l'action demandée, de
+  façon non bloquante.
 - **Diagramme** : voir « Reconnexion Wi-Fi » dans [architecture.md](architecture.md).
 - **Alternatives écartées** : les appels de connexion bloquants de
   `BlockingWifi` (`connect`, `wait_netif_up`), qui figeaient l'affichage

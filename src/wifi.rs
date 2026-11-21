@@ -5,17 +5,22 @@ use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::modem::Modem,
     nvs::EspDefaultNvsPartition,
+    sys::EspError,
     wifi::{AuthMethod, BlockingWifi, ClientConfiguration, Configuration, EspWifi},
 };
 use log::{info, warn};
 use timeflow_core::{
     health::FailureLatch,
-    link::{LinkAction, Reconnector},
+    link::{LinkAction, LinkStatus, LinkTimeouts, Reconnector},
 };
 
-/// Temps laissé à chaque tentative de connexion (association et DHCP) avant
-/// qu'elle soit abandonnée et relancée.
-const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(15);
+/// Délais d'une tentative de connexion. L'association prend quelques
+/// secondes ; le DHCP peut être bien plus lent avec un signal faible, et
+/// réessaie de lui-même tant que la station reste associée.
+const TIMEOUTS: LinkTimeouts = LinkTimeouts {
+    association: Duration::from_secs(15),
+    address: Duration::from_secs(60),
+};
 
 /// Lien Wi-Fi vers le point d'accès configuré dans `wifi.toml`.
 ///
@@ -26,6 +31,8 @@ const ATTEMPT_TIMEOUT: Duration = Duration::from_secs(15);
 pub struct WifiLink<'d> {
     wifi: BlockingWifi<EspWifi<'d>>,
     reconnector: Reconnector,
+    /// État du lien au dernier `poll`, pour ne journaliser que les changements.
+    last_status: LinkStatus,
     status_health: FailureLatch,
 }
 
@@ -67,7 +74,8 @@ impl<'d> WifiLink<'d> {
         wifi.start()?;
         Ok(Self {
             wifi,
-            reconnector: Reconnector::new(ATTEMPT_TIMEOUT),
+            reconnector: Reconnector::new(TIMEOUTS),
+            last_status: LinkStatus::Down,
             status_health: FailureLatch::new("Wi-Fi status"),
         })
     }
@@ -76,18 +84,37 @@ impl<'d> WifiLink<'d> {
     ///
     /// `now` est le temps écoulé depuis le démarrage.
     pub fn poll(&mut self, now: Duration) {
-        let was_up = self.reconnector.is_up();
         // Une erreur du pilote est journalisée une fois, puis traitée comme un
         // lien coupé : la prochaine tentative tranchera.
-        let is_up = self.status_health.check(self.wifi.is_up()).unwrap_or(false);
-        match (was_up, is_up) {
-            (false, true) => info!("Wi-Fi connected"),
-            (true, false) => warn!("Wi-Fi connection lost"),
-            _ => {}
+        let status = self
+            .status_health
+            .check(self.read_status())
+            .unwrap_or(LinkStatus::Down);
+        if status != self.last_status {
+            match (self.last_status, status) {
+                (_, LinkStatus::Up) => info!("Wi-Fi connected"),
+                (LinkStatus::Up, LinkStatus::Associated) => {
+                    warn!("Wi-Fi IP address lost, waiting for DHCP")
+                }
+                (_, LinkStatus::Associated) => info!("Wi-Fi associated, waiting for an IP address"),
+                (_, LinkStatus::Down) => warn!("Wi-Fi connection lost"),
+            }
+            self.last_status = status;
         }
-        if self.reconnector.poll(now, is_up) == LinkAction::Connect {
+        if self.reconnector.poll(now, status) == LinkAction::Connect {
             self.start_attempt();
         }
+    }
+
+    /// Lit l'état du lien auprès du pilote.
+    fn read_status(&self) -> Result<LinkStatus, EspError> {
+        Ok(if self.wifi.is_up()? {
+            LinkStatus::Up
+        } else if self.wifi.is_connected()? {
+            LinkStatus::Associated
+        } else {
+            LinkStatus::Down
+        })
     }
 
     /// Abandonne la tentative en cours et en lance une nouvelle, sans attendre.
@@ -95,10 +122,12 @@ impl<'d> WifiLink<'d> {
         info!("Connecting to Wi-Fi");
         // On utilise ici les appels non bloquants d'`EspWifi` : ceux de
         // `BlockingWifi` figeraient l'affichage jusqu'à la fin du délai.
-        // Une station associée mais sans adresse IP (tentative à moitié faite)
-        // est d'abord déconnectée. Si ESP-IDF n'a pas encore traité cette
-        // déconnexion, `connect` peut échouer : la tentative suivante, 15 s plus
-        // tard, prend alors le relais.
+        // Une station associée mais sans adresse IP au-delà du délai est
+        // d'abord déconnectée. Cette déconnexion est asynchrone : tant
+        // qu'ESP-IDF ne l'a pas traitée, `connect` peut échouer, et le `poll`
+        // suivant peut encore lire « associé » puis « coupé » et relancer une
+        // seconde tentative. Ce n'est pas grave : au pire, une tentative de
+        // trop et un message « connection lost » superflu.
         let wifi = self.wifi.wifi_mut();
         if wifi.is_connected().unwrap_or(false) {
             if let Err(e) = wifi.disconnect() {

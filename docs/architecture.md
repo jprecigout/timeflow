@@ -75,7 +75,7 @@ sequenceDiagram
     M->>N: EspSntp::new_default
     loop toutes les 200 ms
         M->>W: poll(uptime)
-        Note over W: relance une tentative si le lien est coupé<br/>ou si la précédente dépasse 15 s
+        Note over W: relance une tentative si le lien est coupé,<br/>si l'association dépasse 15 s ou le DHCP 60 s
         M->>N: get_sync_status (jusqu'au premier succès)
         alt heure synchronisée
             M->>C: Time::from_utc(utc, EuropeParis), render
@@ -93,19 +93,34 @@ sequenceDiagram
 
 ## Reconnexion Wi-Fi
 
+`WifiLink` lit l'état du lien auprès du pilote (`LinkStatus`) : non associé
+(`Down`), associé sans adresse IP (`Associated`) ou associé avec une adresse IP
+(`Up`). Le `Reconnector` en déduit son état interne et l'action à mener.
+
 ```mermaid
 stateDiagram-v2
     [*] --> Down
-    Down --> Up: lien déjà établi
-    Down --> Connecting: lien coupé → Connect
-    Connecting --> Up: lien établi (adresse IP obtenue)
-    Connecting --> Connecting: 15 s sans succès → Connect
-    Up --> Connecting: lien perdu → Connect
+    Down --> Associating: non associé → Connect
+    Down --> AwaitingAddress: associé
+    Down --> Up: adresse IP obtenue
+    Associating --> AwaitingAddress: associé
+    Associating --> Up: adresse IP obtenue
+    Associating --> Associating: 15 s sans association → Connect
+    AwaitingAddress --> Up: adresse IP obtenue
+    AwaitingAddress --> Associating: 60 s sans adresse IP → Connect
+    AwaitingAddress --> Associating: association perdue → Connect
+    Up --> AwaitingAddress: adresse IP perdue
+    Up --> Associating: association perdue → Connect
 ```
 
+Les deux étapes ont des délais séparés. Une station associée n'est jamais coupée
+avant 60 s, car la déconnecter interrompt le DHCP, qui réessaie de lui-même tant
+qu'elle reste associée. Avec un signal faible (-75 dBm environ), le DHCP a
+déjà pris plus de 12 s sur la carte : avec un délai unique de 15 s, la connexion
+était relancée cinq fois de suite et l'adresse IP n'arrivait qu'au bout de 80 s.
+
 À chaque `Connect`, `WifiLink` déconnecte d'abord la station si elle est
-associée sans adresse IP (tentative à moitié faite), puis relance une connexion
-non bloquante.
+encore associée, puis relance une connexion non bloquante.
 
 ## Coupure d'alimentation du bandeau
 
