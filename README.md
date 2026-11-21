@@ -111,3 +111,7 @@ Le style est défini dans `rustfmt.toml` (rustfmt est fourni avec la toolchain `
 cargo fmt          # formate le code
 cargo fmt --check  # vérifie seulement, sans rien modifier
 ```
+
+## Licence
+
+Ce projet est distribué sous la licence Apache 2.0. Voir le fichier [LICENSE](LICENSE).
